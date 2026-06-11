@@ -1589,6 +1589,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "stellar-access"
 version = "0.7.1"
+source = "git+https://github.com/OpenZeppelin/stellar-contracts?branch=feat%2Fconfidential-verifier-ultrahonk#539968f158e0d779f584de2821090f715a3b25e1"
 dependencies = [
  "soroban-sdk",
 ]
@@ -1596,6 +1597,7 @@ dependencies = [
 [[package]]
 name = "stellar-contract-utils"
 version = "0.7.1"
+source = "git+https://github.com/OpenZeppelin/stellar-contracts?branch=feat%2Fconfidential-verifier-ultrahonk#539968f158e0d779f584de2821090f715a3b25e1"
 dependencies = [
  "soroban-sdk",
 ]
@@ -1603,6 +1605,7 @@ dependencies = [
 [[package]]
 name = "stellar-governance"
 version = "0.7.1"
+source = "git+https://github.com/OpenZeppelin/stellar-contracts?branch=feat%2Fconfidential-verifier-ultrahonk#539968f158e0d779f584de2821090f715a3b25e1"
 dependencies = [
  "soroban-sdk",
 ]
@@ -1610,6 +1613,7 @@ dependencies = [
 [[package]]
 name = "stellar-macros"
 version = "0.7.1"
+source = "git+https://github.com/OpenZeppelin/stellar-contracts?branch=feat%2Fconfidential-verifier-ultrahonk#539968f158e0d779f584de2821090f715a3b25e1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1640,6 +1644,7 @@ dependencies = [
 [[package]]
 name = "stellar-tokens"
 version = "0.7.1"
+source = "git+https://github.com/OpenZeppelin/stellar-contracts?branch=feat%2Fconfidential-verifier-ultrahonk#539968f158e0d779f584de2821090f715a3b25e1"
 dependencies = [
  "soroban-poseidon",
  "soroban-sdk",

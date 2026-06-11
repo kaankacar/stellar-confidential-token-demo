@@ -7,23 +7,24 @@ edition = "2021"
 version = "0.1.0"
 license = "MIT"
 
-# The confidential token, access-control, and proc-macro crates are consumed by
-# path from a local checkout of OpenZeppelin/stellar-contracts on the
-# `feat/confidential-verifier-ultrahonk` branch. They are NOT published, so the
-# path below must point at that worktree. Adjust if you cloned it elsewhere.
+# The confidential token, access-control, and proc-macro crates are consumed as
+# git dependencies from the `feat/confidential-verifier-ultrahonk` branch of
+# OpenZeppelin/stellar-contracts (they are NOT published to crates.io). Cargo.lock
+# pins the exact resolved commit; this branch was validated at rev 539968f. Run
+# `cargo update -p stellar-tokens` to move to the branch tip.
 #
 # Transitive deps (soroban-poseidon, stellar-contract-utils, stellar-governance,
 # and the pinned `ultrahonk-soroban-verifier` git rev) are resolved through that
-# workspace and need not be redeclared here.
+# repo's workspace and need not be redeclared here.
 # NOTE: `stellar-tokens` pulls in soroban-sdk's `experimental_spec_shaking_v2`
 # feature transitively, which is why these contracts MUST be compiled with
 # `stellar contract build` (stellar-cli >= 25.2.0), not plain `cargo build`.
 # See scripts/build-contracts.sh.
 [workspace.dependencies]
 soroban-sdk = { version = "26.0.0" }
-stellar-access = { path = "../../stellar-contracts-cv-ultrahonk/packages/access" }
-stellar-macros = { path = "../../stellar-contracts-cv-ultrahonk/packages/macros" }
-stellar-tokens = { path = "../../stellar-contracts-cv-ultrahonk/packages/tokens" }
+stellar-access = { git = "https://github.com/OpenZeppelin/stellar-contracts", branch = "feat/confidential-verifier-ultrahonk" }
+stellar-macros = { git = "https://github.com/OpenZeppelin/stellar-contracts", branch = "feat/confidential-verifier-ultrahonk" }
+stellar-tokens = { git = "https://github.com/OpenZeppelin/stellar-contracts", branch = "feat/confidential-verifier-ultrahonk" }
 
 # Soroban release profile: optimize for wasm code size and determinism.
 [profile.release]
