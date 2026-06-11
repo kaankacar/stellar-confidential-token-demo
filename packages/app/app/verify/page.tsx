@@ -17,7 +17,6 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import {
   ChainClient,
   CircuitProver,
@@ -41,7 +40,7 @@ import discloseSenderVk from "@ctd/disclosure/artifacts/disclose_sender.vk.json"
 
 import { DEPLOYMENT } from "@/lib/deployment";
 import { ensureBrowserBackend } from "@/lib/bb-loader";
-import { CopyButton } from "../events-panel";
+import { CopyButton } from "../copy-button";
 
 const RR_KEY = "ctd:disclosure:rR";
 const REQUEST_KEY = "ctd:disclosure:request";
@@ -130,17 +129,16 @@ export default function VerifyPage() {
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="mb-8">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Verify a Disclosure</h1>
-          <Link href="/" className="text-sm text-indigo-400 underline hover:text-indigo-300">
-            ← Wallet
-          </Link>
-        </div>
+        <h1 className="text-2xl font-semibold">
+          Disclosure receiver <span className="text-base font-normal text-neutral-500">· verify a disclosure</span>
+        </h1>
         <p className="mt-1 text-sm text-neutral-400">
-          You are the disclosure receiver: a counterparty who asked an account holder to prove
-          one fact about one on-chain transfer. No wallet needed — this page reads the chain,
-          verifies the proof against the shared circuit artifacts, and decrypts the amount
-          sealed to your key. Nothing here is published anywhere.
+          This page is for the curious counterparty — a tax office, a compliance desk, or anyone
+          an account holder owes exactly one answer to. You ask them to prove one fact about one
+          on-chain transfer; unlike the auditor, you hold no master key and learn nothing they
+          don&apos;t explicitly prove to you. No wallet needed — this page reads the chain,
+          verifies the proof against the shared circuit artifacts, and decrypts the amount sealed
+          to your key. Nothing here is published anywhere.
         </p>
       </header>
 

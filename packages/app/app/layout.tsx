@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { PersonaNav } from "./nav";
 
 export const metadata: Metadata = {
   title: "Confidential Token Demo · Stellar",
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen font-mono">{children}</body>
+      <body className="min-h-screen font-mono">
+        <PersonaNav />
+        {children}
+      </body>
     </html>
   );
 }

@@ -9,6 +9,7 @@
  *   - chain/    RPC client, XDR payload envelopes, op submitters, event ingest
  *   - state/    RPC-only balance reconstruction with local persistence
  *   - disclosure/  off-chain selective disclosure (prove + verify, §SELECTIVE_DISCLOSURE.md)
+ *   - auditor/  auditor-side event decryption (DESIGN.md §8)
  */
 
 export * from "./crypto/index.js";
@@ -17,3 +18,4 @@ export * from "./proving/index.js";
 export * from "./chain/index.js";
 export * from "./state/index.js";
 export * from "./disclosure/index.js";
+export * from "./auditor/index.js";
