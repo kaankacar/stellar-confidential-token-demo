@@ -62,6 +62,13 @@ export interface TransferWitness {
    * e2e flow / tests; on-chain the recipient derives these from the event.
    */
   recipientView: { vTx: bigint; rTx: bigint; cTx: Point };
+  /**
+   * The ephemeral SCALAR `r_e` sampled for this transfer. Wallets that intend
+   * to support D-sender disclosures must retain it per outgoing transfer
+   * (SELECTIVE_DISCLOSURE.md §15.2) — it is the only witness that lets the
+   * sender later prove what the event ciphertext contains.
+   */
+  rEScalar: bigint;
 }
 
 export function buildTransferWitness(p: TransferParams): TransferWitness {
@@ -127,5 +134,6 @@ export function buildTransferWitness(p: TransferParams): TransferWitness {
     payload: { cSpendNew, cTx, rE: rePoint, vTilde, bTilde, sigma, vAudR, rAudR, vAudS, bAudS },
     next: { v: vNew, r: rNew, cSpend: cSpendNew },
     recipientView: { vTx: amount, rTx, cTx },
+    rEScalar: rE,
   };
 }

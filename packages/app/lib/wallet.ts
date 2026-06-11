@@ -31,22 +31,34 @@ import {
   submitMerge,
   submitWithdraw,
   submitTransfer,
+  fetchEvents,
+  proveRecipientDisclosure,
+  proveSenderDisclosure,
+  pointCoords,
+  type ConfidentialEvent,
+  type TransferEvent,
+  type DisclosureRequest,
+  type DisclosureBundle,
 } from "@ctd/sdk";
 import registerCircuit from "@ctd/sdk/circuits/register.json";
 import withdrawCircuit from "@ctd/sdk/circuits/withdraw.json";
 import transferCircuit from "@ctd/sdk/circuits/transfer.json";
+import discloseRecipientCircuit from "@ctd/disclosure/artifacts/disclose_recipient.json";
+import discloseSenderCircuit from "@ctd/disclosure/artifacts/disclose_sender.json";
 
 import { DEPLOYMENT } from "./deployment";
 import { connectFreighter } from "./freighter";
 import { ensureBrowserBackend } from "./bb-loader";
 
 type Log = (msg: string) => void;
-type CircuitName = "register" | "withdraw" | "transfer";
+type CircuitName = "register" | "withdraw" | "transfer" | "disclose_recipient" | "disclose_sender";
 
 const CIRCUITS: Record<CircuitName, { bytecode: string } & Record<string, unknown>> = {
   register: registerCircuit as never,
   withdraw: withdrawCircuit as never,
   transfer: transferCircuit as never,
+  disclose_recipient: discloseRecipientCircuit as never,
+  disclose_sender: discloseSenderCircuit as never,
 };
 
 export interface WalletView {
@@ -163,6 +175,10 @@ export class ConfidentialWallet {
     this.log("submitting transfer…");
     const r = await submitTransfer(this.client, this.signer, this.address, to, w, proof);
     await this.engine.setSpendable(w.next);
+    // Retain r_e per outgoing transfer (SELECTIVE_DISCLOSURE.md §15.2) so
+    // this wallet can later prove what it sent (D-sender). Keyed by R_e.x —
+    // unique per transfer and present verbatim in the emitted event.
+    this.retainRE(toHex32(pointCoords(w.payload.rE).x), toHex32(w.rEScalar));
     this.log(`transferred ${amount} → ${to.slice(0, 6)}… (tx ${r.hash.slice(0, 10)}…)`);
   }
 
@@ -178,6 +194,113 @@ export class ConfidentialWallet {
     const r = await submitWithdraw(this.client, this.signer, this.address, this.address, amount, w, proof);
     await this.engine.setSpendable(w.next);
     this.log(`withdrew ${amount} → public (tx ${r.hash.slice(0, 10)}…)`);
+  }
+
+  /**
+   * This account's token-contract events still inside the RPC's ~7-day
+   * retention window, newest first. Start is clamped to the RPC's oldest
+   * retained ledger so a deployment older than the window doesn't make
+   * `getEvents` reject.
+   */
+  async listEvents(): Promise<ConfidentialEvent[]> {
+    let start: number = DEPLOYMENT.deployedAtLedger;
+    try {
+      const health = await this.client.server.getHealth();
+      if (health.oldestLedger) start = Math.max(start, health.oldestLedger + 1);
+    } catch {
+      // health endpoint variations are non-fatal; fall back to deploy ledger
+    }
+    const { events } = await fetchEvents(this.client, { startLedger: start });
+    return events.filter((ev) => this.concernsMe(ev)).reverse();
+  }
+
+  private concernsMe(ev: ConfidentialEvent): boolean {
+    switch (ev.type) {
+      case "register":
+      case "merge":
+        return ev.account === this.address;
+      case "deposit":
+      case "withdraw":
+      case "transfer":
+        return ev.from === this.address || ev.to === this.address;
+    }
+  }
+
+  // ---- selective disclosure (SELECTIVE_DISCLOSURE.md §12, holder side) -----
+
+  private get reStoreKey(): string {
+    return `ctd:re:${DEPLOYMENT.contracts.token}:${this.address}`;
+  }
+
+  /** Retained ephemeral scalars by `R_e.x` hex (§15.2 wallet obligation). */
+  private retainedREs(): Record<string, string> {
+    try {
+      return JSON.parse(localStorage.getItem(this.reStoreKey) ?? "{}") as Record<string, string>;
+    } catch {
+      return {};
+    }
+  }
+
+  private retainRE(rExHex: string, rEHex: string): void {
+    const m = this.retainedREs();
+    m[rExHex] = rEHex;
+    localStorage.setItem(this.reStoreKey, JSON.stringify(m));
+  }
+
+  /** True iff this wallet kept the ephemeral scalar for an outgoing transfer. */
+  canDiscloseSent(event: TransferEvent): boolean {
+    return toHex32(pointCoords(event.rE).x) in this.retainedREs();
+  }
+
+  /**
+   * Produce a D-recipient disclosure bundle for an inbound transfer event,
+   * answering a third party's `(P_R, ν)` request. Runs the disclosure circuit
+   * in-browser; only works for events whose `to` is this wallet.
+   */
+  async discloseReceived(event: TransferEvent, request: DisclosureRequest): Promise<DisclosureBundle> {
+    if (event.to !== this.address) {
+      throw new Error("D-recipient disclosure only works for transfers addressed to this wallet");
+    }
+    this.log("proving disclosure (D-recipient)…");
+    const bundle = await proveRecipientDisclosure({
+      keys: this.keys,
+      event,
+      request,
+      prover: this.prover("disclose_recipient"),
+    });
+    this.log(`disclosure proof ready for event in tx ${event.txHash.slice(0, 10)}…`);
+    return bundle;
+  }
+
+  /**
+   * Produce a D-sender disclosure bundle for an outgoing transfer event.
+   * Needs the ephemeral scalar retained at transfer time — transfers sent
+   * before that bookkeeping existed (or from another browser) can't be
+   * sender-disclosed (§7).
+   */
+  async discloseSent(event: TransferEvent, request: DisclosureRequest): Promise<DisclosureBundle> {
+    if (event.from !== this.address) {
+      throw new Error("D-sender disclosure only works for transfers sent by this wallet");
+    }
+    const rEHex = this.retainedREs()[toHex32(pointCoords(event.rE).x)];
+    if (!rEHex) {
+      throw new Error(
+        "no retained ephemeral scalar for this transfer — it was sent before sender-disclosure support or from another browser",
+      );
+    }
+    const recipient = await this.client.confidentialBalance(event.to);
+    if (!recipient) throw new Error("transfer recipient has no confidential account record");
+    this.log("proving disclosure (D-sender)…");
+    const bundle = await proveSenderDisclosure({
+      keys: this.keys,
+      rEScalar: fromHex(rEHex),
+      event,
+      pvkB: recipient.viewingPublicKey,
+      request,
+      prover: this.prover("disclose_sender"),
+    });
+    this.log(`disclosure proof ready for event in tx ${event.txHash.slice(0, 10)}…`);
+    return bundle;
   }
 
   /** Sync from RPC events, verify against chain, and return a UI view. */

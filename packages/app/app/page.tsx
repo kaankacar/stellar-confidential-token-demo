@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import Link from "next/link";
 import { ConfidentialWallet, type WalletView } from "@/lib/wallet";
 import { DEPLOYMENT } from "@/lib/deployment";
+import { EventsPanel } from "./events-panel";
 
 export default function Page() {
   const [wallet, setWallet] = useState<ConfidentialWallet | null>(null);
@@ -55,7 +57,12 @@ export default function Page() {
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="mb-8">
-        <h1 className="text-2xl font-semibold">Confidential Token · Stellar</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Confidential Token · Stellar</h1>
+          <Link href="/verify" className="text-sm text-indigo-400 underline hover:text-indigo-300">
+            Verify a disclosure →
+          </Link>
+        </div>
         <p className="mt-1 text-sm text-neutral-400">
           Balances are Grumpkin Pedersen commitments; every move is an on-chain UltraHonk proof.
           Proofs are generated in your browser. Testnet · unaudited demo.
@@ -135,6 +142,8 @@ export default function Page() {
               </button>
             </div>
           </section>
+
+          <EventsPanel wallet={wallet} />
 
           <button
             onClick={run("refresh", async () => {})}

@@ -91,6 +91,15 @@ export const DOMAIN = {
   AUDITOR_SENDER: 11n,
   /** Recipient-auditor channel tag. */
   AUDITOR_RECIPIENT: 12n,
+  /**
+   * Off-chain selective-disclosure ciphertext to a disclosure recipient:
+   * `v_tilde_disc = v_tx + Poseidon2(DISCLOSURE, S_disc.x, nu)`.
+   * SELECTIVE_DISCLOSURE.md §2.2 / §4 (`delta_disc`); continues the on-chain
+   * tag list. Source of truth: packages/disclosure circuits.
+   */
+  DISCLOSURE: 13n,
+  /** Aggregate-disclosure nonce binding (`delta_disc_bind`, §10). Reserved. */
+  DISCLOSURE_BIND: 14n,
 } as const;
 
 /** Verifier circuit-type discriminants (verifier/mod.rs `CircuitType`). */

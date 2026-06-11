@@ -10,6 +10,9 @@ importers:
 
   packages/app:
     dependencies:
+      '@ctd/disclosure':
+        specifier: workspace:*
+        version: link:../disclosure
       '@ctd/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -50,6 +53,8 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
+
+  packages/disclosure: {}
 
   packages/sdk:
     dependencies:

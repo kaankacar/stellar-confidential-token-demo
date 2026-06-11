@@ -90,6 +90,17 @@ export class CircuitProver {
     return backend.verifyProof(result, KECCAK);
   }
 
+  /**
+   * Derive this circuit's verification key (keccak transcript). Off-chain
+   * disclosure verifiers compare these bytes against the pinned VK shipped in
+   * `@ctd/disclosure` before trusting a verify result — the VK is the
+   * cryptographic fingerprint of the circuit (SELECTIVE_DISCLOSURE.md §5.5).
+   */
+  async verificationKey(): Promise<Uint8Array> {
+    const backend = await this.#backendInstance();
+    return backend.getVerificationKey(KECCAK);
+  }
+
   async destroy(): Promise<void> {
     await this.#backend?.destroy();
   }

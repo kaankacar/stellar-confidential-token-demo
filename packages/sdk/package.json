@@ -17,11 +17,14 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "circuits"],
+  "files": [
+    "dist",
+    "circuits"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx test/smoke.mjs && tsx test/parity.mjs && tsx test/payload.mjs && tsx test/prove.mjs",
+    "test": "tsx test/smoke.mjs && tsx test/parity.mjs && tsx test/payload.mjs && tsx test/prove.mjs && tsx test/disclosure.mjs",
     "test:fast": "tsx test/smoke.mjs && tsx test/parity.mjs && tsx test/payload.mjs"
   },
   "dependencies": {

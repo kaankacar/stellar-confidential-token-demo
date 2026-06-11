@@ -16,8 +16,8 @@
 
 import { xdr, Address, scValToNative, rpc } from "@stellar/stellar-sdk";
 
-import { fromBytesBE } from "../crypto/field.js";
-import { pointFromBytes, type Point } from "../crypto/grumpkin.js";
+import { fromBytesBE, toHex32 } from "../crypto/field.js";
+import { pointFromBytes, pointCoords, type Point } from "../crypto/grumpkin.js";
 import type { ChainClient } from "./client.js";
 
 export type ConfidentialEventType =
@@ -137,6 +137,72 @@ export async function fetchEvents(
   }
 
   return { events: out, cursor: resumeCursor, latestLedger };
+}
+
+/**
+ * Event reference (SELECTIVE_DISCLOSURE.md §5.1): pins one on-chain event.
+ * `id` is the RPC's canonical event identifier (the same value exposed as
+ * {@link BaseEvent.cursor}); `ledger`/`txHash` let the verifier bound the
+ * lookup and cross-check the resolution.
+ */
+export interface EventRef {
+  ledger: number;
+  id: string;
+  txHash: string;
+}
+
+export const eventRef = (ev: ConfidentialEvent): EventRef => ({
+  ledger: ev.ledger,
+  id: ev.cursor,
+  txHash: ev.txHash,
+});
+
+/**
+ * Resolve an {@link EventRef} to the single on-chain event it names, reading
+ * ONLY the referenced ledger from the RPC (ledger-range mode). Returns `null`
+ * if no token-contract event with that id exists there — including when the
+ * ledger has aged out of the RPC's ~7-day retention window, which is this
+ * demo's accepted limitation. The disclosure verifier (disclosure/verify.ts)
+ * treats the result as the sole source of event-derived public inputs.
+ */
+export async function resolveEventRef(
+  client: ChainClient,
+  ref: EventRef,
+): Promise<ConfidentialEvent | null> {
+  const resp = await client.server.getEvents({
+    filters: [{ type: "contract", contractIds: [client.cfg.contracts.token] }],
+    startLedger: ref.ledger,
+    endLedger: ref.ledger + 1,
+    limit: 200,
+  });
+  const matches = resp.events.filter((ev) => ev.id === ref.id);
+  if (matches.length !== 1) return null;
+  const ev = matches[0]!;
+  if (ev.txHash !== ref.txHash) return null;
+  return parseEvent(ev);
+}
+
+/**
+ * Plain-JSON projection of a parsed event (bigints → 0x-hex, points → x/y
+ * hex), with its {@link EventRef} attached as `ref`. This is the
+ * copy-to-clipboard format the UI exposes so any third party can re-resolve
+ * and inspect the event.
+ */
+export function eventToJson(ev: ConfidentialEvent): Record<string, unknown> {
+  const plain: Record<string, unknown> = { ref: eventRef(ev) };
+  for (const [k, v] of Object.entries(ev)) {
+    if (k === "cursor") continue;
+    if (typeof v === "bigint") plain[k] = toHex32(v);
+    else if (isPoint(v)) {
+      const { x, y } = pointCoords(v);
+      plain[k] = { x: toHex32(x), y: toHex32(y) };
+    } else plain[k] = v;
+  }
+  return plain;
+}
+
+function isPoint(v: unknown): v is Point {
+  return typeof v === "object" && v !== null && "toAffine" in v;
 }
 
 function parseEvent(ev: rpc.Api.EventResponse): ConfidentialEvent | null {

@@ -113,6 +113,15 @@ export const encryptAuditorSenderBalance = (
 ): bigint => frAdd(vNew, poseidonWithDomain(DOMAIN.AUDITOR_SENDER, [sAsX, sigma]));
 
 /**
+ * `v_tilde_disc = v_tx + Poseidon2(DISCLOSURE, s_disc_x, nu)` — the U3 stage
+ * of every selective-disclosure circuit (SELECTIVE_DISCLOSURE.md §4). The
+ * recipient inverts it with {@link decryptWithDomain} after ECDH-recovering
+ * `s_disc_x` from the bundle's `R_disc`.
+ */
+export const encryptDisclosure = (vTx: bigint, sDiscX: bigint, nu: bigint): bigint =>
+  frAdd(vTx, poseidonWithDomain(DOMAIN.DISCLOSURE, [sDiscX, nu]));
+
+/**
  * Decrypt a scalar ciphertext: `plaintext = ciphertext - Poseidon2(tag, ...)`.
  * Used by the state engine to recover `v_new` from an emitted `b_tilde`, etc.
  */

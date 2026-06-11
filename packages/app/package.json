@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ctd/disclosure": "workspace:*",
     "@ctd/sdk": "workspace:*",
     "@stellar/freighter-api": "^4.1.0",
     "@stellar/stellar-sdk": "^14.2.0",
