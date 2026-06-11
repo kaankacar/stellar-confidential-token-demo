@@ -1,0 +1,32 @@
+{
+  "name": "@ctd/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "vendor:bb": "node ../../scripts/vendor-bb.mjs",
+    "predev": "pnpm vendor:bb",
+    "dev": "next dev",
+    "prebuild": "pnpm vendor:bb",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ctd/sdk": "workspace:*",
+    "@stellar/freighter-api": "^4.1.0",
+    "@stellar/stellar-sdk": "^14.2.0",
+    "next": "14.2.15",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.7.0"
+  }
+}

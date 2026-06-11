@@ -1,0 +1,19 @@
+{
+  "name": "confidential-token-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Confidential token demo on Stellar (Soroban) — SDK + web app, RPC-only (no indexer).",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:sdk": "pnpm --filter @ctd/sdk build",
+    "test:sdk": "pnpm --filter @ctd/sdk test",
+    "dev": "pnpm --filter @ctd/app dev",
+    "build:contracts": "bash scripts/build-contracts.sh",
+    "deploy": "pnpm --filter @ctd/sdk exec tsx ../../scripts/deploy.ts",
+    "e2e": "pnpm --filter @ctd/sdk exec tsx ../../scripts/e2e.ts"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,24 @@
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+.next/
+out/
+
+# Vendored bb.js browser build (copied from node_modules by scripts/vendor-bb.mjs)
+packages/app/public/vendor/
+
+# Rust / Soroban
+target/
+contracts/target/
+
+# Env / secrets / generated
+.env
+.env.*
+!.env.example
+deployments/*.json
+.soroban/
+*.log
+
+# OS
+.DS_Store

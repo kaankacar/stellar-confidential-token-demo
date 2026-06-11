@@ -1,0 +1,200 @@
+/**
+ * ConfidentialWallet — UI-facing orchestration over @ctd/sdk.
+ *
+ * Holds the RPC client, the Freighter signer, the user's confidential key set,
+ * a local state engine, and lazily-created provers. All proving happens in the
+ * browser (bb.js); the confidential `sk` never leaves the device and is cached
+ * in localStorage (a demo shortcut — production would derive it from a wallet
+ * signature).
+ */
+
+import {
+  ChainClient,
+  type Signer,
+  type OnChainAccount,
+  deriveKeys,
+  type KeyPair,
+  addressToField,
+  randomScalar,
+  toHex32,
+  fromHex,
+  StateEngine,
+  LocalStorageStore,
+  type AccountState,
+  type CircuitProver,
+  proverFromArtifact,
+  buildRegisterWitness,
+  buildWithdrawWitness,
+  buildTransferWitness,
+  submitRegister,
+  submitDeposit,
+  submitMerge,
+  submitWithdraw,
+  submitTransfer,
+} from "@ctd/sdk";
+import registerCircuit from "@ctd/sdk/circuits/register.json";
+import withdrawCircuit from "@ctd/sdk/circuits/withdraw.json";
+import transferCircuit from "@ctd/sdk/circuits/transfer.json";
+
+import { DEPLOYMENT } from "./deployment";
+import { connectFreighter } from "./freighter";
+import { ensureBrowserBackend } from "./bb-loader";
+
+type Log = (msg: string) => void;
+type CircuitName = "register" | "withdraw" | "transfer";
+
+const CIRCUITS: Record<CircuitName, { bytecode: string } & Record<string, unknown>> = {
+  register: registerCircuit as never,
+  withdraw: withdrawCircuit as never,
+  transfer: transferCircuit as never,
+};
+
+export interface WalletView {
+  address: string;
+  registered: boolean;
+  spendable: bigint;
+  receiving: bigint;
+  syncedLedger: number;
+  matchesChain: boolean | null;
+}
+
+export class ConfidentialWallet {
+  private provers = new Map<CircuitName, CircuitProver>();
+
+  private constructor(
+    readonly address: string,
+    private signer: Signer,
+    private keys: KeyPair,
+    private client: ChainClient,
+    private engine: StateEngine,
+    private log: Log,
+  ) {}
+
+  static async connect(log: Log): Promise<ConfidentialWallet> {
+    ensureBrowserBackend();
+    const signer = await connectFreighter();
+    log(`connected ${signer.publicKey}`);
+
+    const client = new ChainClient({
+      rpcUrl: DEPLOYMENT.rpcUrl,
+      networkPassphrase: DEPLOYMENT.networkPassphrase,
+      contracts: DEPLOYMENT.contracts,
+    });
+
+    const addrF = addressToField(DEPLOYMENT.contracts.token);
+    const skKey = `ctd:sk:${DEPLOYMENT.contracts.token}:${signer.publicKey}`;
+    let sk: bigint;
+    const stored = localStorage.getItem(skKey);
+    if (stored) {
+      sk = fromHex(stored);
+    } else {
+      sk = randomScalar();
+      localStorage.setItem(skKey, toHex32(sk));
+      log("generated a fresh confidential key (cached in localStorage)");
+    }
+    const keys = deriveKeys(sk, addrF);
+
+    const engine = new StateEngine({
+      client,
+      store: new LocalStorageStore(),
+      keys,
+      address: signer.publicKey,
+      fromLedger: DEPLOYMENT.deployedAtLedger,
+    });
+
+    return new ConfidentialWallet(signer.publicKey, signer, keys, client, engine, log);
+  }
+
+  private prover(name: CircuitName): CircuitProver {
+    let p = this.provers.get(name);
+    if (!p) {
+      p = proverFromArtifact(CIRCUITS[name]);
+      this.provers.set(name, p);
+    }
+    return p;
+  }
+
+  /** Read on-chain account (null if not registered). */
+  async account(): Promise<OnChainAccount | null> {
+    return this.client.confidentialBalance(this.address);
+  }
+
+  async register(): Promise<void> {
+    const w = buildRegisterWitness(this.keys);
+    this.log("proving register…");
+    const { proof } = await this.prover("register").prove(w.inputs);
+    this.log("submitting register…");
+    const r = await submitRegister(this.client, this.signer, this.address, DEPLOYMENT.auditorId, w, proof);
+    this.log(`registered (tx ${r.hash.slice(0, 10)}…)`);
+  }
+
+  async deposit(amount: bigint): Promise<void> {
+    this.log(`depositing ${amount}…`);
+    const r = await submitDeposit(this.client, this.signer, this.address, this.address, amount);
+    this.log(`deposited (tx ${r.hash.slice(0, 10)}…) → receiving balance`);
+  }
+
+  async merge(): Promise<void> {
+    this.log("merging receiving → spendable…");
+    const r = await submitMerge(this.client, this.signer, this.address);
+    this.log(`merged (tx ${r.hash.slice(0, 10)}…)`);
+  }
+
+  async transfer(to: string, amount: bigint): Promise<void> {
+    const recipient = await this.client.confidentialBalance(to);
+    if (!recipient) throw new Error("recipient is not registered");
+    const kAudR = await this.client.auditorKey(recipient.auditorId);
+    const kAudS = await this.client.auditorKey(DEPLOYMENT.auditorId);
+
+    const s = await this.engine.sync();
+    if (s.spendable.v < amount) throw new Error(`insufficient spendable balance (${s.spendable.v})`);
+
+    const w = buildTransferWitness({
+      keys: this.keys,
+      v: s.spendable.v,
+      r: s.spendable.r,
+      amount,
+      pvkB: recipient.viewingPublicKey,
+      kAudR,
+      kAudS,
+    });
+    this.log("proving transfer…");
+    const { proof } = await this.prover("transfer").prove(w.inputs);
+    this.log("submitting transfer…");
+    const r = await submitTransfer(this.client, this.signer, this.address, to, w, proof);
+    await this.engine.setSpendable(w.next);
+    this.log(`transferred ${amount} → ${to.slice(0, 6)}… (tx ${r.hash.slice(0, 10)}…)`);
+  }
+
+  async withdraw(amount: bigint): Promise<void> {
+    const kAudS = await this.client.auditorKey(DEPLOYMENT.auditorId);
+    const s = await this.engine.sync();
+    if (s.spendable.v < amount) throw new Error(`insufficient spendable balance (${s.spendable.v})`);
+
+    const w = buildWithdrawWitness({ keys: this.keys, v: s.spendable.v, r: s.spendable.r, amount, kAudS });
+    this.log("proving withdraw…");
+    const { proof } = await this.prover("withdraw").prove(w.inputs);
+    this.log("submitting withdraw…");
+    const r = await submitWithdraw(this.client, this.signer, this.address, this.address, amount, w, proof);
+    await this.engine.setSpendable(w.next);
+    this.log(`withdrew ${amount} → public (tx ${r.hash.slice(0, 10)}…)`);
+  }
+
+  /** Sync from RPC events, verify against chain, and return a UI view. */
+  async refresh(): Promise<WalletView> {
+    const state: AccountState = await this.engine.sync();
+    const onchain = await this.account();
+    let matchesChain: boolean | null = null;
+    if (onchain) {
+      matchesChain = (await this.engine.verifyAgainstChain()).ok;
+    }
+    return {
+      address: this.address,
+      registered: onchain !== null,
+      spendable: state.spendable.v,
+      receiving: state.receiving.v,
+      syncedLedger: state.syncedLedger,
+      matchesChain,
+    };
+  }
+}
