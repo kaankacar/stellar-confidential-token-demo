@@ -190,7 +190,7 @@ export default function AuditorPage() {
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold">
-          Auditor <span className="text-base font-normal text-neutral-500">· the one with the master key</span>
+          Auditor
         </h1>
         <p className="mt-1 text-sm text-neutral-400">
           You are the designated auditor for this deployment — every account registered under your

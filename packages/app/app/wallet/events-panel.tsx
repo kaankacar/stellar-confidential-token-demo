@@ -231,6 +231,8 @@ function badgeCls(type: ConfidentialEvent["type"], direction: Direction): string
       return "bg-amber-900 text-amber-300";
     case "register":
       return "bg-purple-900 text-purple-300";
+    case "merge":
+      return "bg-emerald-900 text-emerald-300";
     default:
       return "bg-neutral-800 text-neutral-300";
   }

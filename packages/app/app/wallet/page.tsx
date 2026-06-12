@@ -7,6 +7,46 @@ import { EventsPanel } from "./events-panel";
 
 type ActionTab = "deposit" | "withdraw" | "transfer" | "merge";
 
+// Per-action visual identity. Colors match the activity-panel badges
+// (deposit = sky, withdraw = amber); classes are literal so Tailwind sees them.
+const ACTIONS: Record<
+  ActionTab,
+  { icon: string; title: string; hint: string; card: string; panel: string; btn: string }
+> = {
+  deposit: {
+    icon: "↓",
+    title: "Deposit",
+    hint: "Public XLM (stroops) → your receiving balance.",
+    card: "border-sky-500/60 bg-sky-500/15 text-sky-300",
+    panel: "border-sky-500/30 bg-sky-500/5",
+    btn: "bg-sky-600 hover:bg-sky-500",
+  },
+  withdraw: {
+    icon: "↑",
+    title: "Withdraw",
+    hint: "Spendable → public XLM (to yourself).",
+    card: "border-amber-500/60 bg-amber-500/15 text-amber-300",
+    panel: "border-amber-500/30 bg-amber-500/5",
+    btn: "bg-amber-600 hover:bg-amber-500",
+  },
+  transfer: {
+    icon: "→",
+    title: "Transfer",
+    hint: "Send to another registered account's receiving balance — amount stays private.",
+    card: "border-violet-500/60 bg-violet-500/15 text-violet-300",
+    panel: "border-violet-500/30 bg-violet-500/5",
+    btn: "bg-violet-600 hover:bg-violet-500",
+  },
+  merge: {
+    icon: "⊕",
+    title: "Merge",
+    hint: "Fold your receiving balance into spendable.",
+    card: "border-emerald-500/60 bg-emerald-500/15 text-emerald-300",
+    panel: "border-emerald-500/30 bg-emerald-500/5",
+    btn: "bg-emerald-600 hover:bg-emerald-500",
+  },
+};
+
 export default function Page() {
   const [wallet, setWallet] = useState<ConfidentialWallet | null>(null);
   const [view, setView] = useState<WalletView | null>(null);
@@ -95,10 +135,9 @@ export default function Page() {
         </h1>
         <p className="mt-1 text-sm text-neutral-400">
           This page is for you, the regular user: you hold tokens, move them around, and nobody
-          watching the chain learns the amounts. Balances are Grumpkin Pedersen commitments; every
-          move is an on-chain UltraHonk proof, generated right here in your browser. If a
+          watching the chain learns the amounts. If a
           counterparty asks you to prove what one transfer paid, disclose it from the activity
-          list below. Testnet · unaudited demo.
+          list below.
         </p>
       </header>
 
@@ -160,25 +199,33 @@ export default function Page() {
             </section>
           ) : (
             <section className="rounded border border-neutral-800">
-              <div className="flex border-b border-neutral-800">
+              <div className="flex gap-2 border-b border-neutral-800 bg-neutral-900/40 p-3">
                 {tabs.map((t) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
-                    className={`px-4 py-2 text-sm font-medium capitalize ${
+                    className={`relative flex flex-1 flex-col items-center gap-1 rounded-md border py-2.5 text-sm font-medium transition-colors ${
                       activeTab === t
-                        ? "border-b-2 border-emerald-500 text-emerald-400"
-                        : "text-neutral-400 hover:text-neutral-200"
+                        ? ACTIONS[t].card
+                        : "border-neutral-800 bg-neutral-900/60 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300"
                     }`}
                   >
-                    {t}
+                    <span aria-hidden className="text-lg leading-none">
+                      {ACTIONS[t].icon}
+                    </span>
+                    {ACTIONS[t].title}
+                    {t === "merge" && (
+                      <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-500/20 px-1.5 text-[10px] leading-4 text-emerald-300">
+                        {view.receiving.toString()}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
 
               <div className="p-4">
                 {activeTab === "deposit" && (
-                  <ActionPanel hint="Public XLM (stroops) → your receiving balance.">
+                  <ActionPanel action="deposit">
                     <input
                       className={`${inputCls} sm:w-36`}
                       value={depositAmt}
@@ -187,7 +234,7 @@ export default function Page() {
                     <button
                       onClick={run("deposit", (w) => w.deposit(BigInt(depositAmt)))}
                       disabled={busy !== null}
-                      className={btnCls}
+                      className={`${btnCls} ${ACTIONS.deposit.btn}`}
                     >
                       {busy === "deposit" ? "Submitting tx…" : "Deposit"}
                     </button>
@@ -195,7 +242,7 @@ export default function Page() {
                 )}
 
                 {activeTab === "withdraw" && (
-                  <ActionPanel hint="Spendable → public XLM (to yourself).">
+                  <ActionPanel action="withdraw">
                     <input
                       className={`${inputCls} sm:w-36`}
                       value={withdrawAmt}
@@ -204,7 +251,7 @@ export default function Page() {
                     <button
                       onClick={run("withdraw", (w) => w.withdraw(BigInt(withdrawAmt), setPhase))}
                       disabled={busy !== null}
-                      className={btnCls}
+                      className={`${btnCls} ${ACTIONS.withdraw.btn}`}
                     >
                       {busy === "withdraw" ? phaseLabel(phase) : "Withdraw"}
                     </button>
@@ -212,7 +259,7 @@ export default function Page() {
                 )}
 
                 {activeTab === "transfer" && (
-                  <ActionPanel hint="Send to another registered account's receiving balance — amount stays private.">
+                  <ActionPanel action="transfer">
                     <RecipientSelect
                       recipients={recipients}
                       value={transferTo}
@@ -226,7 +273,7 @@ export default function Page() {
                     <button
                       onClick={run("transfer", (w) => w.transfer(transferTo, BigInt(transferAmt), setPhase))}
                       disabled={busy !== null || !transferTo}
-                      className={btnCls}
+                      className={`${btnCls} ${ACTIONS.transfer.btn}`}
                     >
                       {busy === "transfer" ? phaseLabel(phase) : "Send"}
                     </button>
@@ -234,11 +281,11 @@ export default function Page() {
                 )}
 
                 {activeTab === "merge" && (
-                  <ActionPanel hint="Fold your receiving balance into spendable.">
+                  <ActionPanel action="merge">
                     <button
                       onClick={run("merge", (w) => w.merge())}
                       disabled={busy !== null}
-                      className={btnCls}
+                      className={`${btnCls} ${ACTIONS.merge.btn}`}
                     >
                       {busy === "merge" ? "Submitting tx…" : `Merge ${view.receiving.toString()}`}
                     </button>
@@ -274,8 +321,7 @@ export default function Page() {
 
 const inputCls =
   "rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm outline-none focus:border-emerald-600";
-const btnCls =
-  "rounded bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 disabled:opacity-50";
+const btnCls = "rounded px-4 py-2 text-sm font-medium disabled:opacity-50";
 
 function phaseLabel(phase: TxPhase | null): string {
   if (phase === "submitting") return "Submitting tx…";
@@ -317,10 +363,11 @@ function RecipientSelect(props: {
   );
 }
 
-function ActionPanel(props: { hint: string; children: React.ReactNode }) {
+function ActionPanel(props: { action: ActionTab; children: React.ReactNode }) {
+  const meta = ACTIONS[props.action];
   return (
-    <div>
-      <p className="mb-3 text-xs text-neutral-400">{props.hint}</p>
+    <div className={`rounded-md border p-4 ${meta.panel}`}>
+      <p className="mb-3 text-xs text-neutral-400">{meta.hint}</p>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">{props.children}</div>
     </div>
   );
