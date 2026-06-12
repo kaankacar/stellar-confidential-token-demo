@@ -17,5 +17,12 @@
     "e2e": "pnpm --filter @ctd/sdk exec tsx ../../scripts/e2e.ts",
     "e2e:disclosure": "pnpm --filter @ctd/sdk exec tsx ../../scripts/e2e-disclosure.ts"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "workerd"
+    ]
+  }
 }

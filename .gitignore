@@ -5,6 +5,10 @@ dist/
 .next/
 out/
 
+# Cloudflare (OpenNext + wrangler build output)
+.open-next/
+.wrangler/
+
 # Vendored bb.js browser build (copied from node_modules by scripts/vendor-bb.mjs)
 packages/app/public/vendor/
 
