@@ -77,7 +77,7 @@ function EventRow({ ev, wallet }: { ev: ConfidentialEvent; wallet: ConfidentialW
 
   const direction: Direction =
     ev.type !== "transfer" ? null : ev.to === wallet.address ? "received" : "sent";
-  // Sender disclosure needs the ephemeral scalar retained at transfer time.
+  // Sender disclosure re-derives the ephemeral scalar from this wallet's keys.
   const canDisclose =
     direction === "received" || (direction === "sent" && wallet.canDiscloseSent(ev as TransferEvent));
 
@@ -101,7 +101,7 @@ function EventRow({ ev, wallet }: { ev: ConfidentialEvent; wallet: ConfidentialW
         {direction === "sent" && !canDisclose && (
           <span
             className="text-xs text-neutral-600"
-            title="The ephemeral key for this transfer wasn't retained (sent before sender-disclosure support, or from another browser), so a D-sender proof can't be built."
+            title="This transfer's R_e doesn't match the ephemeral scalar derived from this wallet's keys (it was sent with different keys or a non-deterministic r_e), so a D-sender proof can't be built."
           >
             not disclosable
           </span>

@@ -100,6 +100,15 @@ export const DOMAIN = {
   DISCLOSURE: 13n,
   /** Aggregate-disclosure nonce binding (`delta_disc_bind`, §10). Reserved. */
   DISCLOSURE_BIND: 14n,
+  /**
+   * Wallet-side deterministic ephemeral scalar:
+   * `r_e = Poseidon2(EPHEMERAL_KEY, vk, sigma)`. Never absorbed inside a
+   * circuit — `r_e` is a free private witness there (only `R_e = r_e·H` and
+   * `r_e ≠ 0` are constrained), so this is a client convention, not a wire
+   * contract. It continues the tag list to stay collision-free with the other
+   * `(vk, sigma)`-keyed calls (SPEND_RANDOMNESS, ENCRYPTED_BALANCE).
+   */
+  EPHEMERAL_KEY: 15n,
 } as const;
 
 /** Verifier circuit-type discriminants (verifier/mod.rs `CircuitType`). */

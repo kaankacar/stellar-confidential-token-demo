@@ -24,6 +24,7 @@ import { ChainClient, keypairSigner, type Signer } from "../packages/sdk/src/cha
 import { deriveKeys, type KeyPair } from "../packages/sdk/src/crypto/keys.js";
 import { addressToField } from "../packages/sdk/src/crypto/address.js";
 import { randomScalar, toHex32 } from "../packages/sdk/src/crypto/field.js";
+import { deriveEphemeralRE } from "../packages/sdk/src/crypto/poseidon2.js";
 import { buildRegisterWitness } from "../packages/sdk/src/witness/register.js";
 import { buildTransferWitness } from "../packages/sdk/src/witness/transfer.js";
 import { CircuitProver } from "../packages/sdk/src/proving/prover.js";
@@ -133,14 +134,16 @@ async function main(): Promise<void> {
     assert(verdict.disclosingAccount === bob.kp.publicKey(), "disclosing account mismatch");
     console.log(`  disclosed amount = ${verdict.amount} ✓`);
 
-    console.log("\n[disclosure] alice proves D-sender over the SAME event (retained r_e)");
+    console.log("\n[disclosure] alice proves D-sender over the SAME event (r_e re-derived from the event)");
     const senderReceiver = generateRecipientKeys();
     const senderRequest = newDisclosureRequest(senderReceiver);
     const bobAccount = await client.confidentialBalance(bob.kp.publicKey());
     if (!bobAccount) throw new Error("bob has no on-chain account");
     const senderBundle = await proveSenderDisclosure({
       keys: aliceKeys,
-      rEScalar: tw.rEScalar, // what a wallet retains per outgoing transfer (§15.2)
+      // No retained state: r_e = Poseidon2(EPHEMERAL_KEY, vk, sigma) is
+      // recomputed from vk + the event's public sigma alone.
+      rEScalar: deriveEphemeralRE(aliceKeys.vk, transferEvent.sigma),
       event: transferEvent,
       pvkB: bobAccount.viewingPublicKey,
       request: senderRequest,

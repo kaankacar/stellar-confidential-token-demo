@@ -4,9 +4,9 @@
  * The ORIGINATOR of a confidential transfer proves to a third party that they
  * paid exactly `v_tx` to the on-chain `to` recorded in the event. The event
  * ciphertext is keyed to the recipient's `PVK_B`, so the sender's necessary
- * witness is the ephemeral scalar `r_e` they sampled at transfer time —
- * retained by the wallet per outgoing transfer (§15.2,
- * `TransferWitness.rEScalar`).
+ * witness is the ephemeral scalar `r_e` from transfer time — recomputed as
+ * `Poseidon2(EPHEMERAL_KEY, vk, sigma)` from the event's public `sigma`
+ * (§15.2; see `deriveEphemeralRE`), so no per-transfer state is needed.
  *
  * Public-input order (matches `disclose_sender/src/main.nr`):
  *   addr_f, PVK_A, R_e, sigma, v_tilde, PVK_B, P_R, nu, R_disc, v_tilde_disc
@@ -22,7 +22,7 @@ import { fieldIn, pointIn, type NoirInputs } from "./common.js";
 export interface DiscloseSenderParams {
   /** Originator's contract-bound key set (the event's `from` account). */
   keys: KeyPair;
-  /** The ephemeral SCALAR retained for this transfer (§15.2). */
+  /** The transfer's ephemeral SCALAR, re-derived via `deriveEphemeralRE` (§15.2). */
   rEScalar: bigint;
   /** Per-event fields from the on-chain `Transfer` being disclosed. */
   event: { rE: Point; sigma: bigint; vTilde: bigint };
@@ -47,12 +47,12 @@ export interface DiscloseSenderWitness {
 export function buildDiscloseSenderWitness(p: DiscloseSenderParams): DiscloseSenderWitness {
   const { keys, rEScalar, event, pvkB, pR, nu } = p;
 
-  // DS3 sanity — catch a stale/mismatched retained scalar before proving.
+  // DS3 sanity — catch a mismatched scalar before proving.
   const rEDerived = pointCoords(scalarMul(rEScalar, H));
   const rEEvent = pointCoords(event.rE);
   if (rEDerived.x !== rEEvent.x || rEDerived.y !== rEEvent.y) {
     throw new Error(
-      "retained r_e does not match the event's R_e — wrong event, or this transfer was sent from another wallet",
+      "supplied r_e does not match the event's R_e — wrong event, or this transfer was sent with different keys",
     );
   }
 

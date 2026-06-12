@@ -98,6 +98,15 @@ export interface FetchEventsResult {
 }
 
 /**
+ * Ledger sequence encoded in an RPC event cursor (`<toid>-<event index>`,
+ * where `toid = ledger << 32 | ...`). The cursor the RPC returns marks the end
+ * of the ledger range it SCANNED, which can be far behind the chain head.
+ */
+function cursorLedger(cursor: string): number {
+  return Number(BigInt(cursor.split("-")[0]!) >> 32n);
+}
+
+/**
  * Fetch and parse all confidential-token events from `startLedger` (or resume
  * from `startCursor`), following pagination to the end. Unknown event types
  * (config setters, spender ops) are skipped.
@@ -131,9 +140,17 @@ export async function fetchEvents(
       if (parsed) out.push(parsed);
     }
     // GetEventsResponse.cursor is the canonical resume token for the next page.
+    const prevCursor = resumeCursor;
     resumeCursor = resp.cursor;
     pageCursor = resp.cursor;
-    if (resp.events.length < limit) break;
+
+    // A short — even empty — page does NOT mean we reached the chain head:
+    // the RPC scans a bounded window of ledgers (~10k) per request and stops
+    // there, returning a cursor at the end of the SCANNED range. Page until
+    // that cursor catches up with the RPC's latest ledger.
+    if (!resp.cursor) break;
+    if (cursorLedger(resp.cursor) >= resp.latestLedger) break;
+    if (resp.cursor === prevCursor) break; // defensive: no forward progress
   }
 
   return { events: out, cursor: resumeCursor, latestLedger };

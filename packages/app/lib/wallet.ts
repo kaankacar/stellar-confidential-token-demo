@@ -34,6 +34,9 @@ import {
   fetchEvents,
   proveRecipientDisclosure,
   proveSenderDisclosure,
+  deriveEphemeralRE,
+  scalarMul,
+  H,
   pointCoords,
   type ConfidentialEvent,
   type TransferEvent,
@@ -175,10 +178,8 @@ export class ConfidentialWallet {
     this.log("submitting transfer…");
     const r = await submitTransfer(this.client, this.signer, this.address, to, w, proof);
     await this.engine.setSpendable(w.next);
-    // Retain r_e per outgoing transfer (SELECTIVE_DISCLOSURE.md §15.2) so
-    // this wallet can later prove what it sent (D-sender). Keyed by R_e.x —
-    // unique per transfer and present verbatim in the emitted event.
-    this.retainRE(toHex32(pointCoords(w.payload.rE).x), toHex32(w.rEScalar));
+    // No r_e bookkeeping (§15.2): the witness derives it from (vk, sigma), so
+    // discloseSent() re-derives it from the emitted event whenever needed.
     this.log(`transferred ${amount} → ${to.slice(0, 6)}… (tx ${r.hash.slice(0, 10)}…)`);
   }
 
@@ -228,28 +229,24 @@ export class ConfidentialWallet {
 
   // ---- selective disclosure (SELECTIVE_DISCLOSURE.md §12, holder side) -----
 
-  private get reStoreKey(): string {
-    return `ctd:re:${DEPLOYMENT.contracts.token}:${this.address}`;
+  /**
+   * Recover the ephemeral scalar for an outgoing transfer:
+   * `r_e = Poseidon2(EPHEMERAL_KEY, vk, sigma)`, checked against the event's
+   * `R_e`. No per-transfer state — `sigma` is public in the event. `null`
+   * means the transfer wasn't built with this wallet's keys and the
+   * deterministic derivation (e.g. a pre-derivation random-r_e transfer).
+   */
+  private recoverRE(event: TransferEvent): bigint | null {
+    const eventRE = pointCoords(event.rE);
+    const derived = deriveEphemeralRE(this.keys.vk, event.sigma);
+    const derivedRE = pointCoords(scalarMul(derived, H));
+    if (derivedRE.x === eventRE.x && derivedRE.y === eventRE.y) return derived;
+    return null;
   }
 
-  /** Retained ephemeral scalars by `R_e.x` hex (§15.2 wallet obligation). */
-  private retainedREs(): Record<string, string> {
-    try {
-      return JSON.parse(localStorage.getItem(this.reStoreKey) ?? "{}") as Record<string, string>;
-    } catch {
-      return {};
-    }
-  }
-
-  private retainRE(rExHex: string, rEHex: string): void {
-    const m = this.retainedREs();
-    m[rExHex] = rEHex;
-    localStorage.setItem(this.reStoreKey, JSON.stringify(m));
-  }
-
-  /** True iff this wallet kept the ephemeral scalar for an outgoing transfer. */
+  /** True iff this wallet can produce the ephemeral scalar for an outgoing transfer. */
   canDiscloseSent(event: TransferEvent): boolean {
-    return toHex32(pointCoords(event.rE).x) in this.retainedREs();
+    return this.recoverRE(event) !== null;
   }
 
   /**
@@ -273,19 +270,18 @@ export class ConfidentialWallet {
   }
 
   /**
-   * Produce a D-sender disclosure bundle for an outgoing transfer event.
-   * Needs the ephemeral scalar retained at transfer time — transfers sent
-   * before that bookkeeping existed (or from another browser) can't be
-   * sender-disclosed (§7).
+   * Produce a D-sender disclosure bundle for an outgoing transfer event. The
+   * ephemeral scalar is re-derived from `vk` + the event's public `sigma`
+   * (deterministic r_e) — no per-transfer state (§7).
    */
   async discloseSent(event: TransferEvent, request: DisclosureRequest): Promise<DisclosureBundle> {
     if (event.from !== this.address) {
       throw new Error("D-sender disclosure only works for transfers sent by this wallet");
     }
-    const rEHex = this.retainedREs()[toHex32(pointCoords(event.rE).x)];
-    if (!rEHex) {
+    const rEScalar = this.recoverRE(event);
+    if (rEScalar === null) {
       throw new Error(
-        "no retained ephemeral scalar for this transfer — it was sent before sender-disclosure support or from another browser",
+        "the event's R_e doesn't match this wallet's derived ephemeral scalar — the transfer wasn't sent with these keys (or used a non-deterministic r_e)",
       );
     }
     const recipient = await this.client.confidentialBalance(event.to);
@@ -293,7 +289,7 @@ export class ConfidentialWallet {
     this.log("proving disclosure (D-sender)…");
     const bundle = await proveSenderDisclosure({
       keys: this.keys,
-      rEScalar: fromHex(rEHex),
+      rEScalar,
       event,
       pvkB: recipient.viewingPublicKey,
       request,

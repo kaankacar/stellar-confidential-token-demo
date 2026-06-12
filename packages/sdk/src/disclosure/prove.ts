@@ -4,8 +4,8 @@
  * proof bundle to hand back. One entry point per role:
  *
  *   - proveRecipientDisclosure — the event paid me (D-recipient, §6)
- *   - proveSenderDisclosure    — I sent the event (D-sender, §7; needs the
- *                                retained ephemeral scalar r_e, §15.2)
+ *   - proveSenderDisclosure    — I sent the event (D-sender, §7; r_e is
+ *                                re-derived from vk + the event's sigma, §15.2)
  *
  * Pure orchestration over the witness builders + prover; the heavy lifting
  * (ECDH decrypt, U-block) is in witness/disclose-{recipient,sender}.ts.
@@ -52,7 +52,7 @@ export async function proveRecipientDisclosure(params: {
 export async function proveSenderDisclosure(params: {
   /** Originator's key set — must be the event's `from` account. */
   keys: KeyPair;
-  /** The ephemeral scalar retained at transfer time (§15.2). */
+  /** The transfer's ephemeral scalar, re-derived via `deriveEphemeralRE` (§15.2). */
   rEScalar: bigint;
   /** The outbound transfer event being disclosed. */
   event: TransferEvent;

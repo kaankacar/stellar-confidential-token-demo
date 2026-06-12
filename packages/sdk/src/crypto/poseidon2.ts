@@ -85,6 +85,23 @@ export const deriveAllowR = (dvk: bigint, sigmaA: bigint): bigint =>
 export const deriveTxBlind = (s: bigint, sigma: bigint): bigint =>
   poseidonWithDomain(DOMAIN.TX_BLINDING, [s, sigma]);
 
+/**
+ * Deterministic ephemeral scalar `r_e = Poseidon2(EPHEMERAL_KEY, vk, sigma)`.
+ *
+ * The circuits leave `r_e` a free witness, so deriving it (instead of
+ * sampling) changes nothing on-chain — but it lets the SENDER re-derive the
+ * scalar for any past outgoing transfer from `vk` plus the event's public
+ * `sigma`, which is what makes D-sender disclosures work without retaining
+ * per-transfer state. Uniqueness comes from `sigma` (fresh per attempt,
+ * DESIGN.md §9.6); secrecy from `vk`. Throws on the ~2⁻²⁵⁴-probability zero
+ * output (T8/W8 require `r_e ≠ 0`) — resample `sigma` if that ever happens.
+ */
+export const deriveEphemeralRE = (vk: bigint, sigma: bigint): bigint => {
+  const rE = poseidonWithDomain(DOMAIN.EPHEMERAL_KEY, [vk, sigma]);
+  if (rE === 0n) throw new Error("derived r_e is zero — resample sigma");
+  return rE;
+};
+
 // ---------------------------------------------------------------------------
 // Encrypted scalars: ciphertext = plaintext + Poseidon2(tag, ...)
 // ---------------------------------------------------------------------------

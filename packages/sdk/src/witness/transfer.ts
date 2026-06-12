@@ -13,6 +13,7 @@ import { H, commit, scalarMul, ecdh, type Point } from "../crypto/grumpkin.js";
 import { randomScalar, frAdd } from "../crypto/field.js";
 import { DOMAIN } from "../crypto/constants.js";
 import {
+  deriveEphemeralRE,
   deriveSpendR,
   deriveTxBlind,
   encryptAmount,
@@ -63,10 +64,11 @@ export interface TransferWitness {
    */
   recipientView: { vTx: bigint; rTx: bigint; cTx: Point };
   /**
-   * The ephemeral SCALAR `r_e` sampled for this transfer. Wallets that intend
-   * to support D-sender disclosures must retain it per outgoing transfer
-   * (SELECTIVE_DISCLOSURE.md §15.2) — it is the only witness that lets the
-   * sender later prove what the event ciphertext contains.
+   * The ephemeral SCALAR `r_e` for this transfer — the witness that lets the
+   * sender later prove what the event ciphertext contains (D-sender,
+   * SELECTIVE_DISCLOSURE.md §15.2). Derived as
+   * `Poseidon2(EPHEMERAL_KEY, vk, sigma)`, so the sender can recompute it
+   * from `vk` + the event's public `sigma` at any time — nothing to retain.
    */
   rEScalar: bigint;
 }
@@ -78,7 +80,11 @@ export function buildTransferWitness(p: TransferParams): TransferWitness {
   if (vNew < 0n) throw new Error("transfer amount exceeds spendable balance");
 
   const sigma = p.sigma ?? randomScalar();
-  const rE = p.rE ?? randomScalar();
+  // Deterministic by default (vk + sigma) so the sender can re-derive r_e
+  // from the emitted event alone and build D-sender disclosures later. The
+  // circuit only constrains R_e = r_e·H and r_e ≠ 0, so an explicit random
+  // p.rE remains equally valid.
+  const rE = p.rE ?? deriveEphemeralRE(keys.vk, sigma);
 
   // Sender balance conservation.
   const cSpend = commit(v, r);
