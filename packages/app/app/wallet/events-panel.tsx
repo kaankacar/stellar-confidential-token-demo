@@ -16,7 +16,7 @@ import type { ConfidentialEvent, TransferEvent, DisclosureRequest } from "@ctd/s
 import type { ConfidentialWallet } from "@/lib/wallet";
 import { CopyButton } from "../copy-button";
 
-export function EventsPanel({ wallet }: { wallet: ConfidentialWallet }) {
+export function EventsPanel({ wallet, reloadKey = 0 }: { wallet: ConfidentialWallet; reloadKey?: number }) {
   const [events, setEvents] = useState<ConfidentialEvent[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,10 +33,11 @@ export function EventsPanel({ wallet }: { wallet: ConfidentialWallet }) {
     }
   }, [wallet]);
 
-  // Events are the dashboard's ground truth — load them on landing.
+  // Events are the dashboard's ground truth — load on landing, and again
+  // whenever the parent bumps reloadKey (after each submitted tx).
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, reloadKey]);
 
   return (
     <section className="rounded border border-neutral-800 p-4">

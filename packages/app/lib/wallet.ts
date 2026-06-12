@@ -64,6 +64,9 @@ const CIRCUITS: Record<CircuitName, { bytecode: string } & Record<string, unknow
   disclose_sender: discloseSenderCircuit as never,
 };
 
+/** Coarse progress of a proof-carrying operation, for UI button labels. */
+export type TxPhase = "proving" | "submitting";
+
 export interface WalletView {
   address: string;
   registered: boolean;
@@ -134,10 +137,12 @@ export class ConfidentialWallet {
     return this.client.confidentialBalance(this.address);
   }
 
-  async register(): Promise<void> {
+  async register(onPhase?: (p: TxPhase) => void): Promise<void> {
     const w = buildRegisterWitness(this.keys);
+    onPhase?.("proving");
     this.log("proving register…");
     const { proof } = await this.prover("register").prove(w.inputs);
+    onPhase?.("submitting");
     this.log("submitting register…");
     const r = await submitRegister(this.client, this.signer, this.address, DEPLOYMENT.auditorId, w, proof);
     this.log(`registered (tx ${r.hash.slice(0, 10)}…)`);
@@ -155,7 +160,7 @@ export class ConfidentialWallet {
     this.log(`merged (tx ${r.hash.slice(0, 10)}…)`);
   }
 
-  async transfer(to: string, amount: bigint): Promise<void> {
+  async transfer(to: string, amount: bigint, onPhase?: (p: TxPhase) => void): Promise<void> {
     const recipient = await this.client.confidentialBalance(to);
     if (!recipient) throw new Error("recipient is not registered");
     const kAudR = await this.client.auditorKey(recipient.auditorId);
@@ -173,8 +178,10 @@ export class ConfidentialWallet {
       kAudR,
       kAudS,
     });
+    onPhase?.("proving");
     this.log("proving transfer…");
     const { proof } = await this.prover("transfer").prove(w.inputs);
+    onPhase?.("submitting");
     this.log("submitting transfer…");
     const r = await submitTransfer(this.client, this.signer, this.address, to, w, proof);
     await this.engine.setSpendable(w.next);
@@ -183,14 +190,16 @@ export class ConfidentialWallet {
     this.log(`transferred ${amount} → ${to.slice(0, 6)}… (tx ${r.hash.slice(0, 10)}…)`);
   }
 
-  async withdraw(amount: bigint): Promise<void> {
+  async withdraw(amount: bigint, onPhase?: (p: TxPhase) => void): Promise<void> {
     const kAudS = await this.client.auditorKey(DEPLOYMENT.auditorId);
     const s = await this.engine.sync();
     if (s.spendable.v < amount) throw new Error(`insufficient spendable balance (${s.spendable.v})`);
 
     const w = buildWithdrawWitness({ keys: this.keys, v: s.spendable.v, r: s.spendable.r, amount, kAudS });
+    onPhase?.("proving");
     this.log("proving withdraw…");
     const { proof } = await this.prover("withdraw").prove(w.inputs);
+    onPhase?.("submitting");
     this.log("submitting withdraw…");
     const r = await submitWithdraw(this.client, this.signer, this.address, this.address, amount, w, proof);
     await this.engine.setSpendable(w.next);
@@ -204,6 +213,24 @@ export class ConfidentialWallet {
    * `getEvents` reject.
    */
   async listEvents(): Promise<ConfidentialEvent[]> {
+    const events = await this.fetchAllEvents();
+    return events.filter((ev) => this.concernsMe(ev)).reverse();
+  }
+
+  /**
+   * Other accounts with a `register` event still inside the RPC retention
+   * window — the demo's only way to enumerate possible transfer recipients
+   * (no indexer). An account registered more than ~7 days ago won't appear.
+   */
+  async registeredRecipients(): Promise<string[]> {
+    const seen = new Set<string>();
+    for (const ev of await this.fetchAllEvents()) {
+      if (ev.type === "register" && ev.account !== this.address) seen.add(ev.account);
+    }
+    return [...seen];
+  }
+
+  private async fetchAllEvents(): Promise<ConfidentialEvent[]> {
     let start: number = DEPLOYMENT.deployedAtLedger;
     try {
       const health = await this.client.server.getHealth();
@@ -212,7 +239,7 @@ export class ConfidentialWallet {
       // health endpoint variations are non-fatal; fall back to deploy ledger
     }
     const { events } = await fetchEvents(this.client, { startLedger: start });
-    return events.filter((ev) => this.concernsMe(ev)).reverse();
+    return events;
   }
 
   private concernsMe(ev: ConfidentialEvent): boolean {
