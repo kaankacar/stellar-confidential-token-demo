@@ -3,9 +3,10 @@
  *
  * Holds the RPC client, the Freighter signer, the user's confidential key set,
  * a local state engine, and lazily-created provers. All proving happens in the
- * browser (bb.js); the confidential `sk` never leaves the device and is cached
- * in localStorage (a demo shortcut — production would derive it from a wallet
- * signature).
+ * browser (bb.js); the confidential `sk` never leaves the device. It is
+ * derived deterministically from a Freighter `signMessage` signature over a
+ * deployment-bound message (see derive-key.ts) and cached in localStorage so
+ * the signature prompt only appears once per account + deployment.
  */
 
 import {
@@ -15,7 +16,6 @@ import {
   deriveKeys,
   type KeyPair,
   addressToField,
-  randomScalar,
   toHex32,
   fromHex,
   StateEngine,
@@ -51,6 +51,7 @@ import discloseSenderCircuit from "@ctd/disclosure/artifacts/disclose_sender.jso
 
 import { DEPLOYMENT } from "./deployment";
 import { connectFreighter } from "./freighter";
+import { keyDerivationMessage, skFromSignature } from "./derive-key";
 import { ensureBrowserBackend } from "./bb-loader";
 
 type Log = (msg: string) => void;
@@ -106,9 +107,13 @@ export class ConfidentialWallet {
     if (stored) {
       sk = fromHex(stored);
     } else {
-      sk = randomScalar();
+      log("sign the key-derivation message in Freighter…");
+      const signature = await signer.signMessage(
+        keyDerivationMessage(DEPLOYMENT.networkPassphrase, DEPLOYMENT.contracts.token),
+      );
+      sk = await skFromSignature(signature);
       localStorage.setItem(skKey, toHex32(sk));
-      log("generated a fresh confidential key (cached in localStorage)");
+      log("derived confidential key from wallet signature (cached in localStorage)");
     }
     const keys = deriveKeys(sk, addrF);
 
