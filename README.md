@@ -1,8 +1,11 @@
-# Confidential Token Demo (Stellar / Soroban)
+# Confidential Token Demo (Stellar)
 
 A working demo of a **confidential token on Stellar**: balances are Pedersen
 commitments on the Grumpkin curve, and every state transition is proven with an
-**UltraHonk zero-knowledge proof** verified on-chain. Built on the
+**UltraHonk zero-knowledge proof** verified on-chain. On top of the token sit
+two compliance channels: **dual auditor ciphertexts** (a master-key auditor can
+decrypt every transfer) and **off-chain selective disclosure** (a holder proves
+one amount of one transfer to one designated receiver). Built on the
 [OpenZeppelin `stellar-contracts`](https://github.com/OpenZeppelin/stellar-contracts)
 `feat/confidential-verifier-ultrahonk` branch.
 
@@ -32,19 +35,30 @@ Operations:
 | `confidential_transfer` | ✔ | Spendable → another account's receiving |
 
 Transfers also emit **dual auditor ciphertexts** (sender + recipient channels),
-so a designated auditor holding the registered Grumpkin key can decrypt amounts.
+so a designated auditor holding the registered Grumpkin key can decrypt amounts
+(`@ctd/sdk` ships the decryption side, and the app has an auditor console).
+
+The demo is a three-hander — the app's landing page is a persona chooser:
+
+- **Account holder** (`/wallet`) — connect Freighter, run the five operations
+  with proofs generated in the browser.
+- **Disclosure receiver** (`/verify`) — issue a one-time disclosure request,
+  verify the returned proof against the chain. No wallet needed.
+- **Auditor** (`/auditor`) — decrypt transfer amounts with the registered
+  auditor key.
 
 ## Architecture
 
 ```
-contracts/                Rust/Soroban (separate Cargo workspace)
-  token/                  ConfidentialToken (NoHooks) — the demo token
-  verifier/               UltraHonk VK registry (verify_proof)
-  auditor/                Grumpkin auditor-key registry
+contracts/                    Rust/Soroban (separate Cargo workspace)
+  token/                      ConfidentialToken (NoHooks) — the demo token
+  verifier/                   UltraHonk VK registry (verify_proof)
+  auditor/                    Grumpkin auditor-key registry
 packages/
-  sdk/      @ctd/sdk      crypto · witness · proving · chain · state
-  app/      @ctd/app      Next.js demo front-end (Freighter wallet)
-scripts/                  deploy.ts · e2e.ts  (testnet)
+  sdk/        @ctd/sdk        crypto · witness · proving · chain · state · auditor · disclosure
+  disclosure/ @ctd/disclosure shared disclosure circuits + pinned VKs (the off-chain trust anchor)
+  app/        @ctd/app        Next.js demo front-end (Freighter wallet)
+scripts/                      deploy.ts · e2e.ts · e2e-disclosure.ts  (testnet)
 ```
 
 The SDK layers:
@@ -59,6 +73,36 @@ The SDK layers:
 - **chain** — RPC client, the `{payload, proof}` XDR envelopes, op submitters,
   and event ingestion.
 - **state** — RPC-only balance reconstruction with local persistence.
+- **auditor** — decrypts the dual auditor ciphertexts emitted by transfers.
+- **disclosure** — the off-chain selective-disclosure protocol: witness
+  building + proving on the holder side, the full verifier protocol (event
+  resolution via RPC, on-chain key lookup, VK pinning, decryption) on the
+  receiver side.
+
+## Selective disclosure (off-chain)
+
+Beyond the always-on auditor channel, a holder can prove **one fact about one
+on-chain event to one designated receiver**, without touching the contract.
+Two circuit variants:
+
+- **D-recipient** — *"this on-chain transfer paid me exactly X."*
+- **D-sender** — *"I sent this on-chain transfer for exactly X, to account B."*
+  The transfer's ephemeral randomness is re-derived deterministically from the
+  sender's viewing key and the event's public `sigma`, so the wallet needs no
+  extra bookkeeping to disclose past sends.
+
+The flow: the receiver mints a one-time request (a fresh Grumpkin key + nonce)
+→ the holder builds a witness from the **real chain event** and proves
+client-side → the receiver resolves the referenced event via RPC, reads the
+prover's registered public key from the chain, verifies the proof against a
+**pinned VK**, and decrypts the amount. Stale or foreign nonces and references
+to non-transfer events hard-reject.
+
+`packages/disclosure` (`@ctd/disclosure`) holds the Noir circuits and their
+pinned UltraHonk verification keys. Prover and receiver must agree on these
+artifacts out-of-band — that agreement is the trust anchor of the off-chain
+protocol. See its [README](packages/disclosure/README.md) for the file-by-file
+breakdown; rebuild artifacts with `pnpm build:disclosure`.
 
 ## The central trade-off: RPC-only, 7-day retention
 
@@ -89,7 +133,7 @@ spent.
 
 ## Deployed (testnet)
 
-`deployments/testnet.json` (regenerate with `scripts/deploy.ts`):
+`deployments/testnet.json` (regenerate with `pnpm deploy:contracts`):
 
 | Contract | ID |
 |----------|----|
@@ -101,11 +145,14 @@ spent.
 ## Prerequisites
 
 - Node ≥ 20, pnpm 10
-- For rebuilding contracts: Rust stable + `wasm32v1-none`, `stellar` CLI ≥ 25.2
-- For regenerating circuit artifacts: `nargo` 1.0.0-beta.9, `bb` 0.87.0
-- A local checkout of `OpenZeppelin/stellar-contracts` @
-  `feat/confidential-verifier-ultrahonk` at
-  `../stellar-contracts-cv-ultrahonk` (path dependency for the contracts)
+- For rebuilding contracts: Rust stable + `wasm32v1-none`, `stellar` CLI ≥ 25.2.
+  The OpenZeppelin crates are pulled as **git dependencies** from the
+  `feat/confidential-verifier-ultrahonk` branch (pinned by `Cargo.lock`) — no
+  local checkout needed.
+- For regenerating circuit artifacts only: `nargo` 1.0.0-beta.9, `bb` 0.87.0,
+  and a local checkout of `OpenZeppelin/stellar-contracts` @
+  `feat/confidential-verifier-ultrahonk` at `../stellar-contracts-cv-ultrahonk`
+  (the disclosure circuits' `Nargo.toml` path-depends on its Noir lib).
 
 ## Build & test
 
@@ -113,13 +160,16 @@ spent.
 pnpm install
 pnpm build:contracts        # stellar contract build → packages/sdk/contracts/*.wasm
 pnpm build:sdk              # tsc → packages/sdk/dist
-pnpm test:sdk               # crypto/proof/payload tests (tsx)
+pnpm test:sdk               # full SDK suite (includes slow proof generation)
 
 # Testnet (uses the `admin` stellar CLI identity as deployer):
-pnpm --filter @ctd/sdk exec tsx ../../scripts/deploy.ts
-pnpm --filter @ctd/sdk exec tsx ../../scripts/e2e.ts
+pnpm deploy:contracts
+pnpm e2e                    # register → deposit → merge → transfer → withdraw
+pnpm e2e:disclosure         # disclosure proving + receiver verification over a real event
 
-pnpm dev                    # run the Next.js demo app
+pnpm dev                    # run the Next.js demo app locally
+pnpm deploy:app             # deploy the app to Cloudflare Workers (OpenNext)
+pnpm build:disclosure       # recompile disclosure circuits + regenerate pinned VKs
 ```
 
 ### SDK test suite
@@ -131,23 +181,37 @@ The tests are the real correctness story:
 - `test/prove.mjs` — generates + verifies real UltraHonk proofs (keccak).
 - `test/payload.mjs` — XDR envelope round-trip (Symbol-keyed contracttype maps,
   flat 64-byte points).
+- `test/auditor.mjs` — auditor ciphertext decryption round-trip.
+- `test/ephemeral.mjs` — deterministic ephemeral-randomness derivation for
+  D-sender disclosures.
+- `test/disclosure.mjs` — disclosure witnesses, proofs, and the receiver's
+  verify protocol, including rejection paths (slow — real proofs).
 - `test/smoke.mjs` — curve / Poseidon2 / serialization sanity.
 
 ### Web app (`@ctd/app`)
 
-A Next.js app that connects Freighter, derives your confidential keys, and runs
-the five operations with **proofs generated in the browser** (bb.js). Balances
-are reconstructed locally from RPC events and shown with a "matches chain" badge
-(`verifyAgainstChain`).
+A Next.js app with one page per persona (see above): the **wallet** connects
+Freighter, derives your confidential keys, and runs the five operations with
+**proofs generated in the browser** (bb.js); balances are reconstructed locally
+from RPC events and shown with a "matches chain" badge (`verifyAgainstChain`).
+The **verify** page is the disclosure receiver; the **auditor** page decrypts
+transfer amounts.
 
 Browser proving needs cross-origin isolation (SharedArrayBuffer); the app sets
 `COOP: same-origin` + `COEP: credentialless` in `next.config.mjs`. The
-confidential `sk` is cached in `localStorage` for the demo — a production wallet
-would derive it from a wallet signature and store it encrypted.
+confidential `sk` is derived deterministically from a Freighter `signMessage`
+signature over a deployment-bound message (Ed25519 signatures are
+deterministic, so the key is recoverable on any device and useless on other
+deployments), then cached in `localStorage` — a production wallet would store
+it encrypted.
 
 ```bash
 pnpm build:sdk && pnpm dev   # http://localhost:3000
 ```
+
+The app deploys to **Cloudflare Workers** via `@opennextjs/cloudflare`
+(`pnpm deploy:app`, config in `wrangler.jsonc`). Next builds with the
+`--webpack` flag — the bb.js handling below is webpack-specific.
 
 **bb.js is *not* bundled by webpack.** Its pre-built browser bundle declares a
 top-level `__webpack_exports__` that collides with webpack's own module runtime,
@@ -160,25 +224,6 @@ bb.js's `dest/browser/` into `public/vendor/bb/` (run automatically by the app's
 path (`lib/bb-loader.ts` overrides `setUltraHonkBackendLoader`), and the bare
 `@aztec/bb.js` specifier is aliased away in the client webpack config. The
 vendored copy is git-ignored and regenerated from `node_modules` on each build.
-
-## What's verified
-
-- **Crypto / witness / prover** — `noir_js` solves SDK-built witnesses against
-  the real circuits; proofs verify locally with the keccak transcript. ✔
-- **Contracts** — build with `stellar contract build`. ✔
-- **On-chain, testnet** — `scripts/e2e.ts` ran the full
-  register → deposit → merge → transfer → withdraw flow; every proof was
-  accepted by the on-chain verifier and local state matched the chain at each
-  step. ✔
-- **In-browser proving** — verified in Chrome: connect Freighter → derive keys →
-  build a register witness → bb.js generates a **14 592-byte keccak proof** and
-  verifies it locally, all client-side (~1.5 s). The RPC-only state sync
-  (`getEvents` + account simulate) also runs in the browser. ✔
-- **App** — `next build` succeeds and the page is cross-origin isolated
-  (`crossOriginIsolated === true`). The only path not exercised by automation is
-  the **Freighter-signed on-chain submit** from the browser; its XDR/submit code
-  is shared with the Node `e2e.ts` above — only the signer (Freighter vs
-  keypair) differs.
 
 ## License
 
