@@ -9,6 +9,7 @@
     "dev": "next dev --webpack",
     "prebuild": "pnpm vendor:bb",
     "build": "next build --webpack",
+    "vercel-build": "pnpm --filter @ctd/sdk build && pnpm vendor:bb && next build --webpack",
     "build:cf": "opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare build && wrangler dev",
     "deploy:cf": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
