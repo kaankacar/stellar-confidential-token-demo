@@ -34,7 +34,9 @@ DEMO_PAUSE=1 pnpm demo   # presenter mode: pause for <Enter> between beats
 Each beat prints a Stellar Expert link so the audience can verify on-chain in
 real time. Fresh accounts are minted each run, so you can re-run it live safely.
 
-### B) Web app — `pnpm dev` → http://localhost:3000
+### B) Web app — live at https://stellar-confidential-token-demo.vercel.app
+
+(or run locally: `pnpm dev` → http://localhost:3000)
 
 Three personas, proofs generated **in the browser** (bb.js):
 - **`/wallet`** — connect Freighter, run the five operations.
