@@ -6,6 +6,10 @@ OZ × Stellar Developer Preview X Live.
 
 > Testnet only. Contracts + verifier + circuits are unaudited. No real value.
 
+![Confidential Token demo — the full lifecycle on testnet](media/demo.gif)
+
+*(`pnpm demo` recorded end-to-end on testnet. Higher-quality `media/demo.mp4`; replayable source `media/demo.cast`.)*
+
 ## Our live deployment (testnet)
 
 | Contract | ID | Explorer |
