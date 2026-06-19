@@ -13,15 +13,15 @@ export const DEPLOYMENT = {
   rpcUrl: "https://soroban-testnet.stellar.org",
   networkPassphrase: Networks.TESTNET,
   /** Ledger the token was deployed at — the first-sync start point. */
-  deployedAtLedger: 3013364,
+  deployedAtLedger: 3171184,
   /** All accounts in this demo register under this auditor id. */
   auditorId: 0,
   /** Auditor Grumpkin secret `k` for auditor id 0 (see header warning). */
-  auditorSecretHex: "0x00c066da47bac8f87cd3eb9a36c37b417ca40cfa2730e7d8eb7f0bf939d11832",
+  auditorSecretHex: "0x007c7c84441b1d3f4b1a9b198188f045008c4a9ab38de862a3cab5f7320d59c4",
   contracts: {
-    token: "CBF64DEOVQAXJFBSNGFEUT2AH4H7K5JBY3ZYJ5GVEINMNSDISWRG5N3F",
-    verifier: "CDCET36PIS44DWJM5UQSSI4ZHGRDSBIIQW4G4ALPYK3Y6FEQGY5ZWFXL",
-    auditor: "CA4II62E35TQKPGHCPBD6EBAS732GSGS6H37UUWKEDHR4YTBVMPHVY4L",
+    token: "CCJM3DHVL6G3H36GTB37RADYDGGWRPRIP45AGDV3DL5QD4IKKAVYIFEA",
+    verifier: "CDEZ5STEQCZEUXIH4AMLRRAZRY6H4V4N47MHAZYKH5AZCARR3KYAQKB3",
+    auditor: "CAOJVT7YZRM5AQWEZVGWRI7PNGDMRJ2WYHGJZ4CWQS4G6Z3N2PABM6VO",
     underlying: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
   },
 } as const;

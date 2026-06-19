@@ -44,7 +44,6 @@ function deploy(wasmPath: string, ctorArgs: string[]): string {
     "--wasm", wasmPath,
     "--source", DEPLOYER,
     "--network", NETWORK,
-    "--optimize=false",
     "--", ...ctorArgs,
   ]);
   // The contract id is the last non-empty line of stdout.

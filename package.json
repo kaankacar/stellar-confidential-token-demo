@@ -16,7 +16,8 @@
     "deploy:contracts": "pnpm --filter @ctd/sdk exec tsx ../../scripts/deploy.ts",
     "deploy:app": "pnpm --filter @ctd/app run deploy:cf",
     "e2e": "pnpm --filter @ctd/sdk exec tsx ../../scripts/e2e.ts",
-    "e2e:disclosure": "pnpm --filter @ctd/sdk exec tsx ../../scripts/e2e-disclosure.ts"
+    "e2e:disclosure": "pnpm --filter @ctd/sdk exec tsx ../../scripts/e2e-disclosure.ts",
+    "demo": "pnpm --filter @ctd/sdk exec tsx ../../scripts/demo.ts"
   },
   "license": "MIT",
   "pnpm": {
